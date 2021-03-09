@@ -1,15 +1,17 @@
 /******************************************************************************
- * Mutual authentication based on stong PUFs and hashes - no noise
- *
- * check with:
- * tamarin-prover --prove PUF_strong_mutual.spthy
+    Created : Squanix Machine
+    Date    : 8 Mar 2021 on version 1
+    
+    This protocol model was didecated to modelling the proposed PUF key echange.
+    
+    This protocol using fuzzy extractor
  ******************************************************************************/
 
 theory PUF_Exchange
 
 begin
 
-// PUF is private
+
 functions: spuf/2 [private]
 functions: feg/2 [private]
 functions: puf/2 [private]
@@ -64,22 +66,39 @@ rule Unmanneddev:
   
 rule ServerVer:
   [  ] --> [ Server($Sver)]
-  
+
+/*
+ * Handshaking process 
+ * 
+ * UmD -> Sver : m
+ * Sver -> UmD : n
+ * 
+ */
 rule HandShake1:                                                        // UmD send nonce a to Server verifier
-  [ Unmanend(UmD), Server(Sver), !CRPout(Sver, UmD, chl, res), Fr(~m)] 
-  --[HandshakingA(UmD, Sver, chl)]-> 
-  [ Out(<UmD, Sver, ~m>), Unmanned1(UmD, Sver, chl, res)]
+  [ Unmanend(UmD), Server(Sver), !CRPout(Sver, UmD, chl, res), Fr(~n)] 
+  --[HandshakingA(UmD, Sver, ~n)]-> 
+  [ Out(<UmD, Sver, ~n>), Unmanned1(UmD, Sver, ~n), CRPpass(Sver, UmD, chl, res)]
     
 rule HandShake2:                                                        // Server receive the nonce a and send back nonce b
-  [ In(<UmD, Sver, m>), Unmanned1(UmD, Sver, chl, res), Fr(~n)]
-  --[HandshakingA(Sver, UmD, chl), HandshakingB(Sver, UmD, chl)]->
-  [ Out(<Sver, UmD, ~n>), Server1(Sver, UmD, chl, res) ]
+  [ In(<UmD, Sver, n>), Unmanned1(UmD, Sver, n), Fr(~b)]
+  --[HandshakingA(Sver, UmD, n), HandshakingB(Sver, UmD, ~b)]->
+  [ Out(<Sver, UmD, ~b>), Server1(Sver, UmD, ~b) ]
+
+// ----------------------- HandShaking Process----------------------------------
+
+/*
+ * Authentication process for phase 1
+ * 
+ * Sver -> UmD : n
+ * UmD -> Sver : senc((r,k, hl), c), hl
+ * 
+ */
   
 rule fin1:                                                              // UmD receive nonce b from the server the create challenge by Xor nonce a and b as cr
-  [ In(<Sver, UmD, n>), Server1(Sver, UmD, chl, res)] 
-  --[HandshakingB(UmD, Sver, chl)]->
+  [ In(<Sver, UmD, b>), Server1(Sver, UmD, b), CRPpass(Sver, UmD, chl, res)] 
+  --[HandshakingB(UmD, Sver, b)]->
   [ Unmanned2(Sver, UmD, chl) ]
-  
+
 rule fin1a:                                                             // UmD create PUF from challenge cr as r
   [ Unmanned2(Sver, UmD, chl) ] 
   -->
@@ -92,12 +111,23 @@ rule Auth1a:                                                            // UmD c
 
 rule Auth1b:                                                            // UmD create hash that send to Sver
   [Auth1(Sver, UmD, chl), FEresultG(UmD, res, hl)  ]
-  --[AuthProtocol(UmD, Sver, <chl, res, hl>), SendA(UmD, Sver, chl), SecretA(chl, res, hl)]->
+  --[AuthProtocol1(UmD, Sver, <chl, res, hl>), SendA(UmD, Sver, chl), SecretA(chl, res, hl)]->
   [ Out(<Sver, UmD, senc(<res, hl>, chl)>), Auth1b(UmD, Sver, chl, res, hl) ]
+  
+// ----------------------End Authentication phase 1 process ---------------------------------------
+
+/*
+ * 
+ * Authentication process for phase 2
+ * 
+ * UmD -> Sver : senc((r,k, hl), c), hl
+ * Sver -> UmD : h(c,r,k), senc(key, c)
+ * 
+ */
  
 rule Auth2:
   [In(<Sver, UmD,  senc(<res, hl>, chl)>), Fr(~Key), Auth1b(UmD, Sver, chl, res, hl)]
-  --[AuthProtocol(Sver, UmD, <chl, res, hl>), AuthenticA(UmD, Sver, chl), Init(Sver,UmD, res)]->
+  --[AuthProtocol1(Sver, UmD, <chl, res, hl>), AuthenticA(UmD, Sver, chl), Init(Sver,UmD, res)]->
   [Auth2(Sver, UmD, h(<chl,res,hl>), ~Key, chl, res, hl)]
 
 rule Auth2a:                                            // forming Authentication 2
@@ -112,19 +142,44 @@ rule Auth2b:
 
 rule Auth2c:
   [Auth2b(Sver, UmD, senc(Key, chl), h(auth2a), Key, res)]
-  --[AuthProtocol1(UmD, Sver, Key), SendB(Sver, UmD, chl), SecretB(Key)]->
+  --[AuthProtocol2(UmD, Sver, Key), SendB(Sver, UmD, chl), SecretB(Key)]->
   [Out(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl)]
   
+// ---------------------End Authentication phase 2 process -----------------------------------------
+
+/*
+ * Authentication process for phase 3
+ * 
+ * Sver -> UmD : h(c,r,k), senc(key, c)
+ * UmD -> Sver : h(senc(key, c), h(h(c,r,k), key)) 
+ * 
+ */
 rule Auth3:
-  [In(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl) ]
-  --[AuthProtocol1(Sver, UmD, Key), AuthProtocol1A(Sver, UmD, Key), AuthenticB(Sver, UmD, chl), SendC(UmD, Sver, chl),  SecretC(Key)]->
-  [Out(<Sver, UmD, h(senc(Key, chl), h(auth2a ⊕ Key))>), Auth3(Sver, UmD, Key, chl)]
+  [In(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl)]
+  --[AuthProtocol2(Sver, UmD, Key), AuthProtocol3(Sver, UmD, Key), AuthenticB(Sver, UmD, chl), SendC(UmD, Sver, chl),  SecretC(Key)]->
+  [Out(<Sver, UmD, h(senc(Key, chl)), h(chl)>), Auth3(Sver, UmD, Key, chl)]
+
+// ---------------------End Authentication phase 3 process -----------------------------------------
+  
+/*
+ * Authentication process for final phase
+ * 
+ * UmD -> Sver : h(senc(key, c), h(h(c,r,k), key)) 
+ * 
+ */
 
 rule Auth4:
-  [In(<Sver, UmD, h(senc(Key, chl), h(auth3))>), Auth3(Sver, UmD, Key, chl)]
-  --[AuthProtocol1A(UmD, Sver, h(senc(Key, chl), h(auth3))), AuthenticC(UmD, Sver, chl)]->
+  [In(<Sver, UmD, h(senc(Key, chl)), h(chl)>), Auth3(Sver, UmD, Key, chl) ]
+  --[AuthProtocol3(UmD, Sver, Key), AuthenticC(UmD, Sver, chl)]->
   []
 
+// ---------------------End Authentication final phase process -----------------------------------------
+
+/*
+ * Restriction that used
+ * 
+ * 
+ */
 
 restriction resCRPbeforePUF:
   "All A D c1 c2 #i #j. CRP(A,D,c1)@i & PUF(D,c2)@j ==> i < j"
@@ -147,16 +202,14 @@ restriction resCRPnotReuseBB:
 restriction resCRPnotReuseCC:
   "All A D x #i #j. AuthenticC(A, D, x)@i & AuthenticC(A, D, x)@j ==> #i = #j"
   
-  /*
-lemma Exec:
-    exists-trace
-    "
-    Ex Sver UmD ch #i. Init1(UmD, Sver, ch) @ #i
-    
-    //Ex Sver UmD ch  #i. Got(Sver, UmD, ch) @ #i
-    "
-*/
+// ---------------------End Authentication final phase process -----------------------------------------
   
+/*
+ * lemma to prove the protocol sanity
+ * 
+ * 
+ */
+
 lemma SanityofHandshakeA:
   exists-trace
   "
@@ -176,28 +229,36 @@ lemma SanityofHandshakeB:
 lemma SanityofAuth1:
   exists-trace
   "
-  Ex Sver UmD res #i. AuthProtocol(UmD, Sver, res)@i
+  Ex Sver UmD res #i. AuthProtocol1(UmD, Sver, res)@i
   &
-  Ex Sver UmD res #i. AuthProtocol(Sver, UmD, res)@i
+  Ex Sver UmD res #i. AuthProtocol1(Sver, UmD, res)@i
   "
 
 lemma SanityofAuth2:
   exists-trace
   "
-  Ex Sver UmD keyA #i. AuthProtocol1(UmD, Sver, keyA)@i
+  Ex Sver UmD keyA #i. AuthProtocol2(UmD, Sver, keyA)@i
   &
-  Ex Sver UmD keyA #i. AuthProtocol1(Sver, UmD, keyA)@i
+  Ex Sver UmD keyA #i. AuthProtocol2(Sver, UmD, keyA)@i
   "
   
 lemma SanityofAuth3:
   exists-trace
   "
-  Ex Sver UmD keyA #i. AuthProtocol1A(UmD, Sver, keyA)@i
+  Ex Sver UmD keyA #i. AuthProtocol3(UmD, Sver, keyA)@i
   &
-  Ex Sver UmD keyA #i. AuthProtocol1A(Sver, UmD, keyA)@i
+  Ex Sver UmD keyA #i. AuthProtocol3(Sver, UmD, keyA)@i
   "
+  
+// ---------------------End sanity lemma -----------------------------------------
 
-lemma MutualAuthenticationA:
+/*
+ * lemma to prove the protocol Authentication
+ * 
+ * 
+ */
+
+lemma AuthenticationA:
   "
   All UmD Sver authmessage #i. AuthenticA(UmD, Sver, authmessage) @i ==>
   (
@@ -205,7 +266,7 @@ lemma MutualAuthenticationA:
     )
   "
   
-lemma MutualAuthenticationB:
+lemma AuthenticationB:
   "
   All Sver UmD authmessage #i. AuthenticB(Sver, UmD, authmessage) @i ==>
   (
@@ -213,17 +274,20 @@ lemma MutualAuthenticationB:
     )
   "
 
-lemma MutualAuthenticationC:
+lemma AuthenticationC:
   "
   All UmD Sver authmessage #i. AuthenticC(UmD, Sver, authmessage) @i ==>
   (
     Ex #j. SendC(UmD, Sver, authmessage) @j & j < i
     )
   "
-  
+
+// ---------------------End authentication lemma -----------------------------------------
+
 /*
  * 
- *  This model to validate the replay attack
+ *  lemma to prove replay attack model
+ * 
  */
 
 lemma replayattackmodel1:    // In authentication 1
@@ -271,8 +335,12 @@ lemma replayattackmodel3:    // In authentication 3
   )
   "
 
+// ---------------------End replay attack lemma -----------------------------------------
+
 /*
- * This lemma to validate the packet sniffing
+ * 
+ *  lemma to prove sinffing attack model
+ * 
  */
 
 lemma sniffingAuthentication1:      // In authentication 1
@@ -304,31 +372,7 @@ lemma sniffingAuthentication3:      // In authentication 3
     )
   "
   
-/*  &
-  Ex Sver UmD c r hl #i. AuthProtocol(Sver, UmD, <c, r, hl>)@i
-  & 
-  Ex Sver UmD c r hl #i. AuthProtocol(Sver, UmD, <c, r, hl>)@i
-  &
-  Ex Sver UmD z Key #i. AuthProtocol1(Sver, UmD, <z, Key>)@i
-  &
-  Ex Sver UmD z Key #i. AuthProtocol1(Sver, UmD, <z, Key>)@i
-  "
-*/
-  /*
-lemma MutualAuth:
-  exists-trace
-  "
+// ---------------------End sniffing attack lemma -----------------------------------------
 
-  "
-*/
-/*lemma Sanity:
-  exists-trace
-  "
-  Ex Sver UmD a #i. Init(UmD, Sver,<'UmDToSver',a>)@i
-//  |
-//  Ex Sver UmD a #i. Init(Sver, UmD,<'SverToUmD',a>)@i
-
-  "
-*/
 end
 
