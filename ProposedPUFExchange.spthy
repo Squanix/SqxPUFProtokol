@@ -138,12 +138,25 @@ rule Auth2a:                                            // forming Authenticatio
 rule Auth2b:
   [Auth2a(Sver, UmD, h(auth2a), Key, res, chl)]
   -->
-  [Auth2b(Sver, UmD, senc(Key, chl), h(auth2a), Key, res)]
+  [Auth2b(Sver, UmD, senc(Key, chl), h(auth2a), Key, res, chl)]
 
 rule Auth2c:
-  [Auth2b(Sver, UmD, senc(Key, chl), h(auth2a), Key, res)]
+  [Auth2b(Sver, UmD, senc(Key, chl), h(auth2a), Key, res, chl)]
   --[AuthProtocol2(UmD, Sver, Key), SendB(Sver, UmD, chl), SecretB(Key)]->
-  [Out(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl)]
+  [Out(<Sver, UmD, senc(Key, chl)>), Auth2e(Sver, UmD, Key, chl)] 
+  
+  /*
+   * Note for rule Auth2c.
+   * 
+   * The rule Auth2c has output of Keygen, which symmeric enc from Key by chl, and hash product of chl res and hl. 
+   * To prove the hash product sometime consume alot of computational power for Tamarin. Since the hash product will alwasy secure and unique, we assume to not used hash product in the prove scheme.
+   * 
+   * If you has alot computational power to run Tamarin, i wish you can help me.
+   * 
+   * The original form of Auth2c
+   * [Out(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl)]
+   * 
+   */
   
 // ---------------------End Authentication phase 2 process -----------------------------------------
 
@@ -155,9 +168,22 @@ rule Auth2c:
  * 
  */
 rule Auth3:
-  [In(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2e(Sver, UmD, Key, chl)]
+  [In(<Sver, UmD, senc(Key, chl)>), Auth2e(Sver, UmD, Key, chl)]
   --[AuthProtocol2(Sver, UmD, Key), AuthProtocol3(Sver, UmD, Key), AuthenticB(Sver, UmD, chl), SendC(UmD, Sver, chl),  SecretC(Key)]->
-  [Out(<Sver, UmD, h(senc(Key, chl)), h(chl)>), Auth3(Sver, UmD, Key, chl)]
+  [Out(<Sver, UmD, h(senc(Key, chl))>), Auth3(Sver, UmD, Key, chl)]
+  
+   /*
+   * Note for rule Auth3.
+   * 
+   * The rule Auth3 has output of two hashing product, which hash of symmeric enc from Key by chl, and hash of chl.
+   * To prove the two hash product sometime consume alot of computational power for Tamarin. Since the hash product will alwasy secure and unique, we assume to used one of hash product which is hash of symmeric enc from Key by chl.
+   * 
+   * If you has alot computational power to run Tamarin, i wish you can help me.
+   * 
+   * The original form of Auth2c
+   * [Out(<Sver, UmD, h(senc(Key, chl)), h(chl)>), Auth3(Sver, UmD, Key, chl)]
+   * 
+   */
 
 // ---------------------End Authentication phase 3 process -----------------------------------------
   
@@ -169,7 +195,7 @@ rule Auth3:
  */
 
 rule Auth4:
-  [In(<Sver, UmD, h(senc(Key, chl)), h(chl)>), Auth3(Sver, UmD, Key, chl) ]
+  [In(<Sver, UmD, h(senc(Key, chl))>), Auth3(Sver, UmD, Key, chl) ]
   --[AuthProtocol3(UmD, Sver, Key), AuthenticC(UmD, Sver, chl)]->
   []
 
