@@ -84,7 +84,7 @@ rule HS_rec_n_send_b:                                                        // 
 rule HS_rec_b:                                                              // UmD receive nonce b from the server the create challenge by Xor nonce a and b as cr
   [ In(<Sver, UmD, b>), DBcrpB(Sver, UmD, b), CRPpass(Sver, UmD, chl, res)] 
   --[Handshaking(UmD, Sver, <'StoU', b>)]->
-  [ Unmanned2(Sver, UmD, chl) ]
+  [ Auth1Seed(Sver, UmD, chl) ]
 
 // ----------------------- HandShaking Process----------------------------------
 
@@ -97,7 +97,7 @@ rule HS_rec_b:                                                              // U
  */
   
 rule Auth_1_1:                                                             // UmD create PUF from challenge cr as r
-  [ Unmanned2(Sver, UmD, chl) ] 
+  [ Auth1Seed(Sver, UmD, chl) ] 
   -->
   [ PUFproduce(UmD,chl), Auth_1_1(Sver, UmD, chl) ]
 
@@ -108,7 +108,7 @@ rule Auth_1_2:                                                            // UmD
 
 rule Auth_1_3:                                                            // UmD create hash that send to Sver
   [Auth_1_2(Sver, UmD, chl), FEresultG(UmD, res, khl)  ]
-  --[AuthProtocol1(UmD, Sver, <chl, res, khl>), SendA(UmD, Sver, chl), SecretA(chl, res, khl)]->
+  --[AuthProtocol1(UmD, Sver, <chl, res, khl>), SendA(UmD, Sver, chl), SecretA(Sver, UmD, <chl, res, khl>)]->
   [ Out(<Sver, UmD, senc(<res, khl>, chl)>), Auth1to2(UmD, Sver, khl) ]
  
 // ----------------------End Authentication phase 1 process ---------------------------------------
@@ -125,22 +125,22 @@ rule Auth_1_3:                                                            // UmD
 rule Auth_2_1:
   [In(<Sver, UmD,  senc(<res, khl>, chl)>), Fr(~Key), Auth1to2(UmD, Sver, khl), CRPpass(Sver, UmD, chl, res)]
   --[AuthProtocol1(Sver, UmD, <chl, res, khl>), AuthenticA(UmD, Sver, chl), Init(Sver,UmD, res)]->
-  [Auth_2_1(Sver, UmD, h(<chl,res,khl>), ~Key, chl, res, khl)]
+  [Auth_2_1(Sver, UmD, ~Key, chl, res, khl)]
   
 rule Auth_2_2:                                            // forming Authentication 2
-  [Auth_2_1(Sver, UmD, h(auth2a), Key, chl, res, khl)]
+  [Auth_2_1(Sver, UmD, Key, chl, res, khl)]
   -->
-  [Auth_2_2(Sver, UmD, h(auth2a), Key, res, chl)]
+  [Auth_2_2(Sver, UmD, Key, res, chl), FEgenR(Sver, UmD, khl)]
   
 rule Auth_2_3:
-  [Auth_2_2(Sver, UmD, h(auth2a), Key, res, chl)]
+  [Auth_2_2(Sver, UmD, Key, res, chl), FEresultR(Sver, UmD, khl, khls)]
   -->
-  [Auth_2_3(Sver, UmD, senc(Key, chl), h(auth2a), Key, res, chl)]
+  [Auth_2_3(Sver, UmD, senc(Key, chl), h(<res, chl, khls>), Key, res, chl, khls)]
 
 rule Auth_2_4:
-  [Auth_2_3(Sver, UmD, senc(Key, chl), h(auth2a), Key, res, chl)]
-  --[AuthProtocol2(UmD, Sver, Key), SendB(Sver, UmD, chl), SecretB(Key)]->
-  [Out(<Sver, UmD, senc(Key, chl)>), Auth2to3(Sver, UmD, Key, chl)] 
+  [Auth_2_3(Sver, UmD, senc(Key, chl), auth2, Key, res, chl, khls)]
+  --[AuthProtocol2(UmD, Sver, Key), SendB(Sver, UmD, chl), SecretB(Sver, UmD, Key)]->
+  [Out(<Sver, UmD, senc(Key, chl)>), Auth2to3(Sver, UmD, Key, chl, khls)] 
   
   /*
    * Note for rule Auth2c.
@@ -151,7 +151,7 @@ rule Auth_2_4:
    * If you has alot computational power to run Tamarin, i wish you can help me.
    * 
    * The original form of Auth2c
-   * [Out(<Sver, UmD, senc(Key, chl), h(auth2a)>), Auth2to3(Sver, UmD, Key, chl)]
+   * [Out(<Sver, UmD, senc(Key, chl), auth2>), Auth2to3(Sver, UmD, Key, chl, khls)]
    * 
    */
   
@@ -165,9 +165,9 @@ rule Auth_2_4:
  * 
  */
 rule Auth3:
-  [In(<Sver, UmD, senc(Key, chl)>), Auth2to3(Sver, UmD, Key, chl)]
-  --[AuthProtocol2(Sver, UmD, Key), AuthProtocol3(Sver, UmD, chl, Key), AuthenticB(Sver, UmD, chl), SendC(UmD, Sver, chl),  SecretC(Key)]->
-  [Out(<Sver, UmD, h(senc(Key, chl))>), Auth3to4(Sver, UmD, Key, chl)]
+  [In(<Sver, UmD, senc(Key, chl)>), Auth2to3(Sver, UmD, Key, chl, khls)]
+  --[AuthProtocol2(Sver, UmD, Key), AuthProtocol3(Sver, UmD, chl, Key), AuthenticB(Sver, UmD, chl), SendC(UmD, Sver, <Key,chl>),  SecretC(Sver, UmD, Key)]->
+  [Out(<Sver, UmD, h(<Key, chl>)>), Auth3to4(Sver, UmD, Key, chl)]
   
    /*
    * Note for rule Auth3.
@@ -192,8 +192,8 @@ rule Auth3:
  */
 
 rule Auth4:
-  [In(<Sver, UmD, h(senc(Key, chl))>), Auth3to4(Sver, UmD, Key, chl) ]
-  --[AuthProtocol3(UmD, Sver, chl, Key), AuthenticC(UmD, Sver, chl)]->
+  [In(<Sver, UmD, h(<Key, chl>)>), Auth3to4(Sver, UmD, Key, chl) ]
+  --[AuthProtocol3(UmD, Sver, chl, Key), AuthenticC(UmD, Sver, <Key,chl>)]->
   [Auth4(Sver, UmD, h(senc(Key, chl)))]
 
 // ---------------------End Authentication final phase process -----------------------------------------
@@ -366,8 +366,8 @@ lemma Replay_Attack_Authentication_Phase_3:    // In authentication 3
 
 lemma Sniffing_Attack_Authentication_Phase_1:      // In authentication 1
   "
-  All cr r hl #i.(
-      SecretA(cr, r, hl) @i ==>
+  All Sver UmD cr r hl #i.(
+      SecretA(Sver, UmD, <cr, r, hl>) @i ==>
         not (Ex #j. K(r) @j
         & K(cr) @j
         & K(hl) @j
@@ -377,8 +377,8 @@ lemma Sniffing_Attack_Authentication_Phase_1:      // In authentication 1
   
 lemma Sniffing_Attack_Authentication_Phase_2:      // In authentication 2
   "
-  All key #i.(
-      SecretB(key) @i ==>
+  All Sver UmD key #i.(
+      SecretB(Sver, UmD, key) @i ==>
         not (Ex #j. K(key) @j
         )
     )
@@ -386,8 +386,8 @@ lemma Sniffing_Attack_Authentication_Phase_2:      // In authentication 2
   
 lemma Sniffing_Attack_Authentication_Phase_3:      // In authentication 3
   "
-  All key #i.(
-      SecretC(key) @i ==>
+  All Sver UmD key #i.(
+      SecretC(Sver, UmD, key) @i ==>
         not (Ex #j. K(key) @j
         )
     )
